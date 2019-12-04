@@ -67,6 +67,11 @@ namespace Confluent.Kafka
         internal protected Func<IConsumer<TKey, TValue>, List<TopicPartition>, IEnumerable<TopicPartitionOffset>> PartitionsAssignedHandler { get; set; }
 
         /// <summary>
+        ///     The handler called immediately after a Consumer has assigned itself to partitions.
+        /// </summary>
+        internal protected Action<IConsumer<TKey, TValue>, List<TopicPartitionOffset>> AfterPartitionsAssignedHandler { get; set; }
+
+        /// <summary>
         ///     The configured partitions revoked handler.
         /// </summary>
         internal protected Func<IConsumer<TKey, TValue>, List<TopicPartitionOffset>, IEnumerable<TopicPartitionOffset>> PartitionsRevokedHandler { get; set; }
@@ -96,6 +101,9 @@ namespace Confluent.Kafka
                 partitionsAssignedHandler = this.PartitionsAssignedHandler == null
                     ? default(Func<List<TopicPartition>, IEnumerable<TopicPartitionOffset>>)
                     : partitions => this.PartitionsAssignedHandler(consumer, partitions),
+                afterPartitionsAssignedHandler = this.AfterPartitionsAssignedHandler == null
+                    ? default(Action<List<TopicPartitionOffset>>)
+                    : partitions => this.AfterPartitionsAssignedHandler(consumer, partitions),
                 partitionsRevokedHandler = this.PartitionsRevokedHandler == null
                     ? default(Func<List<TopicPartitionOffset>, IEnumerable<TopicPartitionOffset>>)
                     : partitions => this.PartitionsRevokedHandler(consumer, partitions)
@@ -242,6 +250,18 @@ namespace Confluent.Kafka
             }
 
             this.PartitionsAssignedHandler = partitionsAssignedHandler;
+
+            return this;
+        }
+
+        public ConsumerBuilder<TKey, TValue> SetAfterPartitionsAssignedHandler(Action<IConsumer<TKey, TValue>, List<TopicPartitionOffset>> afterPartitionsAssignedHandler)
+        {
+            if (this.AfterPartitionsAssignedHandler != null)
+            {
+                throw new InvalidOperationException("The partitions assigned handler may not be specified more than once.");
+            }
+
+            this.AfterPartitionsAssignedHandler = afterPartitionsAssignedHandler;
 
             return this;
         }

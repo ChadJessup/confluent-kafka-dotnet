@@ -895,7 +895,17 @@ namespace Confluent.Kafka
         ///     default: consistent_random
         ///     importance: high
         /// </summary>
-        public Partitioner? Partitioner { get { return (Partitioner?)GetEnum(typeof(Partitioner), "partitioner"); } set { this.SetObject("partitioner", value); } }
+        public Partitioner? Partitioner
+        {
+            get
+            {
+                return (Partitioner?)GetEnum(typeof(Partitioner), "partitioner");
+            }
+            set
+            {
+                this.SetObject("partitioner", value);
+            }
+        }
 
         /// <summary>
         ///     Compression level parameter for algorithm selected by configuration property `compression.codec`. Higher values will result in better compression at the cost of more CPU usage. Usable range is algorithm-dependent: [0-9] for gzip; [0-12] for lz4; only 0 for snappy; -1 = codec-dependent default compression level.

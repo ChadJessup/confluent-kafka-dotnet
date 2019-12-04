@@ -37,6 +37,7 @@ namespace Confluent.Kafka
             public Action<Error> errorHandler;
             public Action<LogMessage> logHandler;
             public Action<string> statisticsHandler;
+            public Func<PartitionRequest<TKey, TValue>, int> partitionerHandler;
         }
 
         private ISerializer<TKey> keySerializer;
@@ -115,6 +116,20 @@ namespace Confluent.Kafka
             errorHandler?.Invoke(KafkaHandle.CreatePossiblyFatalError(err, reason));
         }
 
+        private Func<PartitionRequest<TKey, TValue>, int> partitionerHandler;
+        private Librdkafka.PartitionerDelegate partitionerCallbackDelegate;
+        private int PartitionerCallback(IntPtr rkt,
+            IntPtr keydata,
+            UIntPtr keylen,
+            int partition_cnt,
+            IntPtr rkt_opaque,
+            IntPtr msg_opaque)
+        {
+            // Ensure registered handlers are never called as a side-effect of Dispose/Finalize (prevents deadlocks in common scenarios).
+            if (ownedKafkaHandle.IsClosed) { return 0; }
+
+            return 0;
+        }
 
         private Action<string> statisticsHandler;
         private Librdkafka.StatsDelegate statisticsCallbackDelegate;
@@ -502,6 +517,7 @@ namespace Confluent.Kafka
             this.statisticsHandler = baseConfig.statisticsHandler;
             this.logHandler = baseConfig.logHandler;
             this.errorHandler = baseConfig.errorHandler;
+            this.partitionerHandler = baseConfig.partitionerHandler;
 
             var config = Confluent.Kafka.Config.ExtractCancellationDelayMaxMs(baseConfig.config, out this.cancellationDelayMaxMs);
 
@@ -586,6 +602,7 @@ namespace Confluent.Kafka
             errorCallbackDelegate = ErrorCallback;
             logCallbackDelegate = LogCallback;
             statisticsCallbackDelegate = StatisticsCallback;
+            partitionerCallbackDelegate = PartitionerCallback;
 
             if (errorHandler != null)
             {
@@ -598,6 +615,10 @@ namespace Confluent.Kafka
             if (statisticsHandler != null)
             {
                 Librdkafka.conf_set_stats_cb(configPtr, statisticsCallbackDelegate);
+            }
+            if(partitionerHandler != null)
+            {
+                Librdkafka.topic_conf_set_partitioner_cb(configPtr, partitionerCallbackDelegate);
             }
 
             this.ownedKafkaHandle = SafeKafkaHandle.Create(RdKafkaType.Producer, configPtr, this);
@@ -660,6 +681,8 @@ namespace Confluent.Kafka
                     ex);
             }
 
+            topicPartition = GetPartition(topicPartition, message, keyBytes, valBytes);
+
             try
             {
                 if (enableDeliveryReports)
@@ -707,7 +730,6 @@ namespace Confluent.Kafka
                     });
             }
         }
-
 
         /// <summary>
         ///     Refer to <see cref="Confluent.Kafka.IProducer{TKey,TValue}.ProduceAsync(string, Message{TKey, TValue})" />
@@ -781,6 +803,8 @@ namespace Confluent.Kafka
                 );
             }
 
+            topicPartition = GetPartition(topicPartition, message, keyBytes, valBytes);
+
             try
             {
                 ProduceImpl(
@@ -805,6 +829,22 @@ namespace Confluent.Kafka
                             TopicPartitionOffset = new TopicPartitionOffset(topicPartition, Offset.Unset)
                         });
             }
+        }
+
+        private TopicPartition GetPartition(TopicPartition topicPartition, Message<TKey, TValue> message, byte[] keyBytes, byte[] valBytes)
+        {
+            var newTopicPartition = topicPartition;
+
+            if (this.partitionerHandler != null && topicPartition.Partition == Partition.Any)
+            {
+                var partition = this.partitionerHandler?.Invoke(new PartitionRequest<TKey, TValue>(message, keyBytes, valBytes));
+                if (partition.HasValue)
+                {
+                    newTopicPartition = new TopicPartition(topicPartition.Topic, partition.Value);
+                }
+            }
+
+            return newTopicPartition;
         }
 
         private class TypedTaskDeliveryHandlerShim<K, V> : TaskCompletionSource<DeliveryResult<K, V>>, IDeliveryHandler

@@ -42,6 +42,7 @@ namespace Confluent.Kafka
             internal Action<string> statisticsHandler;
             internal Action<CommittedOffsets> offsetsCommittedHandler;
             internal Func<List<TopicPartition>, IEnumerable<TopicPartitionOffset>> partitionsAssignedHandler;
+            internal Action<List<TopicPartitionOffset>> afterPartitionsAssignedHandler;
             internal Func<List<TopicPartitionOffset>, IEnumerable<TopicPartitionOffset>> partitionsRevokedHandler;
         }
 
@@ -75,6 +76,8 @@ namespace Confluent.Kafka
         private bool enableHeaderMarshaling = true;
         private bool enableTimestampMarshaling = true;
         private bool enableTopicNameMarshaling = true;
+
+        private Action<List<TopicPartitionOffset>> afterPartitionsAssignedHandler;
 
         private SafeKafkaHandle kafkaHandle;
 
@@ -145,7 +148,9 @@ namespace Confluent.Kafka
                         throw new InvalidOperationException("Assign/Unassign must not be called in the partitions assigned handler.");
                     }
                 }
+                
                 Assign(assignTo);
+
                 return;
             }
             
@@ -280,7 +285,6 @@ namespace Confluent.Kafka
         public void Assign(TopicPartitionOffset partition)
             => Assign(new List<TopicPartitionOffset> { partition });
 
-
         /// <summary>
         ///     Refer to <see cref="Confluent.Kafka.IConsumer{TKey,TValue}.Assign(IEnumerable{TopicPartitionOffset})" />
         /// </summary>
@@ -288,8 +292,8 @@ namespace Confluent.Kafka
         {
             lock (assignCallCountLockObj) { assignCallCount += 1; }
             kafkaHandle.Assign(partitions.ToList());
+            afterPartitionsAssignedHandler(partitions.ToList());
         }
-
 
         /// <summary>
         ///     Refer to <see cref="Confluent.Kafka.IConsumer{TKey,TValue}.Assign(TopicPartition)" />
@@ -297,7 +301,10 @@ namespace Confluent.Kafka
         public void Assign(IEnumerable<TopicPartition> partitions)
         {
             lock (assignCallCountLockObj) { assignCallCount += 1; }
-            kafkaHandle.Assign(partitions.Select(p => new TopicPartitionOffset(p, Offset.Unset)).ToList());
+            var partitionOffsets = partitions.Select(p => new TopicPartitionOffset(p, Offset.Unset)).ToList();
+
+            kafkaHandle.Assign(partitionOffsets);
+            afterPartitionsAssignedHandler?.Invoke(partitionOffsets);
         }
 
 
@@ -531,6 +538,7 @@ namespace Confluent.Kafka
             this.logHandler = baseConfig.logHandler;
             this.errorHandler = baseConfig.errorHandler;
             this.partitionsAssignedHandler = baseConfig.partitionsAssignedHandler;
+            this.afterPartitionsAssignedHandler = baseConfig.afterPartitionsAssignedHandler;
             this.partitionsRevokedHandler = baseConfig.partitionsRevokedHandler;
             this.offsetsCommittedHandler = baseConfig.offsetsCommittedHandler;
 
