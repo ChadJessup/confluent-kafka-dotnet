@@ -174,6 +174,7 @@ namespace Confluent.Kafka.Impl
             _conf_dump = (ConfDump)methods.Single(m => m.Name == "rd_kafka_conf_dump").CreateDelegate(typeof(ConfDump));
             _topic_conf_dump = (ConfDump)methods.Single(m => m.Name == "rd_kafka_topic_conf_dump").CreateDelegate(typeof(ConfDump));
             _conf_dump_free = (Action<IntPtr, UIntPtr>)methods.Single(m => m.Name == "rd_kafka_conf_dump_free").CreateDelegate(typeof(Action<IntPtr, UIntPtr>));
+            _conf_set_assignor_cb = (Action<IntPtr, AssignorDelegate>)methods.Single(m => m.Name == "").CreateDelegate(typeof(Action<IntPtr, AssignorDelegate>));
             _topic_conf_new = (Func<SafeTopicConfigHandle>)methods.Single(m => m.Name == "rd_kafka_topic_conf_new").CreateDelegate(typeof(Func<SafeTopicConfigHandle>));
             _topic_conf_dup = (Func<IntPtr, IntPtr>)methods.Single(m => m.Name == "rd_kafka_topic_conf_dup").CreateDelegate(typeof(Func<IntPtr, IntPtr>));
             _topic_conf_destroy = (Action<IntPtr>)methods.Single(m => m.Name == "rd_kafka_topic_conf_destroy").CreateDelegate(typeof(Action<IntPtr>));
@@ -340,7 +341,7 @@ namespace Confluent.Kafka.Impl
         {
             if (userSpecifiedPath == null)
             {
-                userSpecifiedPath = @"C:\Projects\Kafka.Streams.net\build\librdkafka\x64\Debug\librdkafka.dll";
+                userSpecifiedPath = @"G:\Projects\Kafka.Streams.net\build\librdkafka\x64\Debug\librdkafka.dll";
             }
 
             lock (loadLockObj)
@@ -527,6 +528,20 @@ namespace Confluent.Kafka.Impl
         internal delegate int StatsDelegate(IntPtr rk, IntPtr json, UIntPtr json_len, IntPtr opaque);
 
         [UnmanagedFunctionPointer(callingConvention: CallingConvention.Cdecl)]
+        internal delegate ErrorCode AssignorDelegate(
+            IntPtr rk,
+            string member_id,
+            string protocol_name,
+            /* const rd_kafka_metadata_t * */IntPtr metadata,
+            /* rd_kafka_group_member_t * */IntPtr members,
+            UIntPtr member_cnt,
+            /* rd_kafka_assignor_topic_t ** */ IntPtr eligible_topics,
+            UIntPtr eligible_topic_cnt,
+            string errstr,
+            UIntPtr errstr_size,
+            IntPtr opaque);
+
+        [UnmanagedFunctionPointer(callingConvention: CallingConvention.Cdecl)]
         internal delegate int PartitionerDelegate(
             /* const rd_kafka_topic_t * */ IntPtr rkt,
             IntPtr keydata,
@@ -646,6 +661,11 @@ namespace Confluent.Kafka.Impl
         private static Action<IntPtr, LogDelegate> _conf_set_log_cb;
         internal static void conf_set_log_cb(IntPtr conf, LogDelegate log_cb)
             => _conf_set_log_cb(conf, log_cb);
+
+        private static Action<IntPtr, AssignorDelegate> _conf_set_assignor_cb;
+        internal static void conf_set_assignor_cb(IntPtr conf, StatsDelegate stats_cb)
+            => _conf_set_stats_cb(conf, stats_cb);
+
 
         private static Action<IntPtr, StatsDelegate> _conf_set_stats_cb;
         internal static void conf_set_stats_cb(IntPtr conf, StatsDelegate stats_cb)
